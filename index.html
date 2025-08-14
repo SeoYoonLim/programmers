@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>PDF 미리보기</title>
+	<style>
+		:root { color-scheme: light dark; }
+		html, body { height: 100%; margin: 0; }
+		body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+		.container { height: 100%; display: flex; flex-direction: column; }
+		header { padding: 12px 16px; background: #f5f5f5; }
+		main { flex: 1; }
+		.pdf { width: 100%; height: calc(100vh - 56px); border: none; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>PDF 미리보기</header>
+		<main>
+			<embed class="pdf" src="./assets/퍼블리싱_250813.pdf" type="application/pdf" />
+		</main>
+	</div>
+</body>
+</html>
