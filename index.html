@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>PDF / 이미지 미리보기</title>
+	<style>
+		:root { color-scheme: light dark; }
+		html, body { height: 100%; margin: 0; }
+		body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+		.container { height: 100%; display: flex; flex-direction: column; }
+		header { padding: 12px 16px; background: #f5f5f5; display: flex; align-items: center; gap: 8px; }
+		header .spacer { flex: 1; }
+		main { flex: 1; }
+		.toolbar button { appearance: none; border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+		.toolbar button.active { background: #111827; color: #fff; border-color: #111827; }
+		section { height: calc(100vh - 56px); }
+		.pdf { width: 100%; height: 100%; border: none; display: none; }
+		.gallery { display: none; height: 100%; overflow: auto; padding: 12px; box-sizing: border-box; }
+		.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+		.grid img { width: 100%; height: auto; border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+		.alert { padding: 12px; border: 1px solid #f59e0b; background: #fffbeb; color: #92400e; border-radius: 8px; }
+		.status { font-size: 12px; color: #6b7280; }
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<strong>PDF / 이미지 미리보기</strong>
+			<div class="spacer"></div>
+			<div class="toolbar">
+				<button id="btn-images" class="active" type="button">이미지 보기</button>
+				<button id="btn-pdf" type="button">PDF 보기</button>
+				<button id="btn-convert" type="button">브라우저 변환</button>
+				<button id="btn-choose-file" type="button">PDF 선택</button>
+				<input id="pdf-file" type="file" accept="application/pdf" style="display:none" />
+				<span id="status" class="status"></span>
+			</div>
+		</header>
+		<main>
+			<section id="view-pdf">
+				<embed id="pdf-embed" class="pdf" src="./assets/퍼블리싱_250813.pdf" type="application/pdf" />
+			</section>
+			<section id="view-images" class="gallery">
+				<div id="gallery" class="grid"></div>
+				<div id="gallery-hint" class="alert" style="display:none; margin-top:12px;">
+					이미지 파일이 아직 없습니다. 아래 방법 중 하나를 사용하세요.<br />
+					1) 상단의 <strong>PDF 선택</strong> → <strong>브라우저 변환</strong><br />
+					2) 서버 변환: <code>bash /workspace/scripts/convert_pdf_to_images.sh "/workspace/assets/퍼블리싱_250813.pdf" 200</code>
+				</div>
+			</section>
+		</main>
+	</div>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+	<script>
+		const pdfFileName = "퍼블리싱_250813";
+		const imagesDir = `./assets/images/${pdfFileName}`;
+		const imagePrefix = "page-";
+		const imageExt = "png";
+
+		const btnImages = document.getElementById('btn-images');
+		const btnPdf = document.getElementById('btn-pdf');
+		const btnConvert = document.getElementById('btn-convert');
+		const btnChooseFile = document.getElementById('btn-choose-file');
+		const inputFile = document.getElementById('pdf-file');
+		const statusEl = document.getElementById('status');
+		const pdfEl = document.getElementById('pdf-embed');
+		const sectionImages = document.getElementById('view-images');
+		const gallery = document.getElementById('gallery');
+		const hint = document.getElementById('gallery-hint');
+
+		function setActive(view) {
+			if (view === 'images') {
+				btnImages.classList.add('active');
+				btnPdf.classList.remove('active');
+				sectionImages.style.display = 'block';
+				pdfEl.style.display = 'none';
+			} else {
+				btnPdf.classList.add('active');
+				btnImages.classList.remove('active');
+				sectionImages.style.display = 'none';
+				pdfEl.style.display = 'block';
+			}
+		}
+
+		function status(msg) { statusEl.textContent = msg || ''; }
+
+		btnImages.addEventListener('click', () => setActive('images'));
+		btnPdf.addEventListener('click', () => setActive('pdf'));
+		btnChooseFile.addEventListener('click', () => inputFile.click());
+		inputFile.addEventListener('change', () => {
+			if (inputFile.files && inputFile.files[0]) {
+				status(`파일 선택됨: ${inputFile.files[0].name}`);
+			}
+		});
+
+		function tryLoadImage(index, onSuccess, onFail) {
+			const img = new Image();
+			img.loading = 'lazy';
+			img.alt = `페이지 ${index}`;
+			img.src = `${imagesDir}/${imagePrefix}${index}.${imageExt}`;
+			img.onload = () => onSuccess(img);
+			img.onerror = onFail;
+		}
+
+		function loadAllImages(maxPages = 300) {
+			let idx = 1;
+			let loadedAny = false;
+
+			function next() {
+				if (idx > maxPages) return;
+				tryLoadImage(idx, (img) => {
+					loadedAny = true;
+					gallery.appendChild(img);
+					idx += 1;
+					next();
+				}, () => {
+					if (!loadedAny) {
+						hint.style.display = 'block';
+						setActive('pdf');
+					} else {
+						// Stop at first missing page
+					}
+				});
+			}
+			next();
+		}
+
+		async function renderPdfToImages(data) {
+			if (!window["pdfjsLib"]) throw new Error('PDF.js 로드 실패');
+			pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+			gallery.innerHTML = '';
+			hint.style.display = 'none';
+			const loadingTask = pdfjsLib.getDocument({ data });
+			const pdf = await loadingTask.promise;
+			for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+				status(`렌더링 중... ${pageNum}/${pdf.numPages}`);
+				const page = await pdf.getPage(pageNum);
+				const viewport = page.getViewport({ scale: 2 });
+				const canvas = document.createElement('canvas');
+				const context = canvas.getContext('2d');
+				canvas.width = viewport.width;
+				canvas.height = viewport.height;
+				await page.render({ canvasContext: context, viewport }).promise;
+				const img = document.createElement('img');
+				img.src = canvas.toDataURL('image/png');
+				img.alt = `페이지 ${pageNum}`;
+				gallery.appendChild(img);
+			}
+			status('완료');
+			setActive('images');
+		}
+
+		async function convertInBrowser(file) {
+			try {
+				status('준비 중...');
+				let data;
+				if (file) {
+					data = await file.arrayBuffer();
+				} else {
+					const res = await fetch(`./assets/${pdfFileName}.pdf`);
+					if (!res.ok) throw new Error('PDF를 찾을 수 없습니다. 상단의 PDF 선택을 사용하세요.');
+					data = await res.arrayBuffer();
+				}
+				await renderPdfToImages(data);
+			} catch (e) {
+				console.error(e);
+				status('실패: ' + (e && e.message ? e.message : e));
+				alert('브라우저 변환 실패: ' + (e && e.message ? e.message : e));
+			}
+		}
+
+		btnConvert.addEventListener('click', () => convertInBrowser(inputFile.files && inputFile.files[0]));
+
+		document.addEventListener('DOMContentLoaded', () => {
+			// Try first image to decide default view
+			tryLoadImage(1, (img) => {
+				gallery.appendChild(img);
+				setActive('images');
+				loadAllImages();
+			}, () => {
+				setActive('pdf');
+				hint.style.display = 'block';
+			});
+		});
+	</script>
+</body>
+</html>
